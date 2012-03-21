@@ -20,7 +20,7 @@ class Follow(models.Model):
     user = models.ForeignKey(User)
 
     content_type = models.ForeignKey(ContentType)
-    object_id = models.CharField(max_length=255)
+    object_id = models.IntegerField()
     follow_object = generic.GenericForeignKey()
     actor_only = models.BooleanField("Only follow actions where the object is "
         "the target.", default=True)
@@ -63,7 +63,7 @@ class Action(models.Model):
 
     """
     actor_content_type = models.ForeignKey(ContentType, related_name='actor')
-    actor_object_id = models.CharField(max_length=255)
+    actor_object_id = models.IntegerField()
     actor = generic.GenericForeignKey('actor_content_type', 'actor_object_id')
 
     verb = models.CharField(max_length=255)
@@ -71,13 +71,13 @@ class Action(models.Model):
 
     target_content_type = models.ForeignKey(ContentType, related_name='target',
         blank=True, null=True)
-    target_object_id = models.CharField(max_length=255, blank=True, null=True)
+    target_object_id = models.IntegerField(blank=True, null=True)
     target = generic.GenericForeignKey('target_content_type',
         'target_object_id')
 
     action_object_content_type = models.ForeignKey(ContentType,
         related_name='action_object', blank=True, null=True)
-    action_object_object_id = models.CharField(max_length=255, blank=True,
+    action_object_object_id = models.IntegerField(blank=True,
         null=True)
     action_object = generic.GenericForeignKey('action_object_content_type',
         'action_object_object_id')
