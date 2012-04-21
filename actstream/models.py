@@ -11,6 +11,7 @@ from django.contrib.auth.models import User
 from actstream import managers, settings as actstream_settings
 from actstream.signals import action
 from actstream.actions import action_handler
+from jsonfield import JSONField
 
 try:
     from django.utils import timezone
@@ -74,6 +75,7 @@ class Action(models.Model):
 
     verb = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
+    data = JSONField(blank=True)
 
     target_content_type = models.ForeignKey(ContentType, related_name='target',
         blank=True, null=True)
