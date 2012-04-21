@@ -1,7 +1,6 @@
 from django.template import Variable, Library, Node, TemplateSyntaxError,\
     VariableDoesNotExist
 from django.template.loader import render_to_string
-from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
 
@@ -10,57 +9,7 @@ from actstream.models import Follow
 register = Library()
 
 
-def _is_following_helper(context, actor):
-    return Follow.objects.is_following(context.get('user'), actor)
-
-class DisplayActivityFollowLabel(Node):
-    def __init__(self, actor, follow, unfollow):
-        self.actor = Variable(actor)
-        self.follow = follow
-        self.unfollow = unfollow
-
-    def render(self, context):
-        actor_instance = self.actor.resolve(context)
-        if _is_following_helper(context, actor_instance):
-            return self.follow
-        return self.unfollow
-
-def do_activity_follow_label(parser, tokens):
-    bits = tokens.contents.split()
-    if len(bits) != 4:
-        raise TemplateSyntaxError, "Accepted format {% activity_follow_label [instance] [follow_string] [unfollow_string] %}"
-    else:
-        return DisplayActivityFollowLabel(*bits[1:])
-
-class DisplayActivityFollowUrl(Node):
-    def __init__(self, actor):
-        self.actor = Variable(actor)
-
-    def render(self, context):
-        actor_instance = self.actor.resolve(context)
-        content_type = ContentType.objects.get_for_model(actor_instance).pk
-        if _is_following_helper(context, actor_instance):
-            return reverse('actstream_unfollow', kwargs={'content_type_id': content_type, 'object_id': actor_instance.pk})
-        return reverse('actstream_follow', kwargs={'content_type_id': content_type, 'object_id': actor_instance.pk})
-
-def do_activity_follow_url(parser, tokens):
-    bits = tokens.contents.split()
-    if len(bits) != 2:
-        raise TemplateSyntaxError, "Accepted format {% activity_follow_url [instance] %}"
-    else:
-        return DisplayActivityFollowUrl(bits[1])
-
-@register.simple_tag
-def activity_followers_url(instance):
-    content_type = ContentType.objects.get_for_model(instance).pk
-    return reverse('actstream_followers',
-        kwargs={'content_type_id': content_type, 'object_id': instance.pk})
-
-
-@register.simple_tag
-def activity_followers_count(instance):
-    return Follow.objects.for_object(instance).count()
-
+# Helpers
 
 class AsNode(Node):
     """
@@ -105,6 +54,73 @@ class AsNode(Node):
         raise NotImplementedError("Must be implemented by a subclass")
 
 
+def activity_templates(verb, template_name='action.html'):
+    return [
+        'activity/%s/%s' % (verb.replace(' ', '_'), template_name),
+        'activity/%s' % template_name,
+    ]
+
+
+def group_verbs(actions, aggressiveness=0):
+    verbs = []
+    groups = {}
+    for action in actions:
+        if action.verb not in verbs:
+            if len(verbs) > aggressiveness:
+                verb = verbs.pop(0)
+                yield (verb, groups.pop(verb))
+            verbs.append(action.verb)
+        groups.setdefault(action.verb, []).append(action)
+    for verb in verbs:
+        yield (verb, groups[verb])
+
+
+# Filters
+
+@register.filter
+def is_following(user, obj):
+    return user.following_activities.for_object(obj).exists()
+
+
+@register.filter
+def activity_followers_count(instance):
+    return Follow.objects.for_object(instance).count()
+
+
+# Tags
+
+class DisplayActivityFollowUrl(Node):
+    def __init__(self, obj):
+        self.obj = obj
+
+    def render(self, context):
+        user = context.get('user')
+        obj = self.obj.resolve(context)
+        content_type = ContentType.objects.get_for_model(obj).pk
+        if user.following_activities.for_object(obj).exists():
+            url_name = 'actstream_unfollow'
+        else:
+            url_name = 'actstream_follow'
+        return reverse(url_name, kwargs={'content_type_id': content_type,
+            'object_id': obj.pk})
+
+
+@register.tag
+def activity_follow_url(parser, tokens):
+    bits = tokens.contents.split()
+    if len(bits) != 3:
+        raise TemplateSyntaxError("Accepted format "
+            "{% activity_follow_url [instance] %}")
+    return DisplayActivityFollowUrl(obj=parser.compile_filter(bits[1]))
+
+
+@register.simple_tag
+def activity_followers_url(instance):
+    content_type = ContentType.objects.get_for_model(instance).pk
+    return reverse('actstream_followers',
+        kwargs={'content_type_id': content_type, 'object_id': instance.pk})
+
+
 class DisplayActionLabel(AsNode):
 
     def render_result(self, context):
@@ -125,84 +141,127 @@ class DisplayActionLabel(AsNode):
         return result
 
 
-class DisplayAction(AsNode):
-
-    def render_result(self, context):
-        action_instance = self.args[0].resolve(context)
-        templates = [
-            'activity/%s/action.html' % action_instance.verb.replace(' ', '_'),
-            'activity/action.html',
-        ]
-        return render_to_string(templates, {'action': action_instance},
-            context)
-
-
-class DisplayActionShort(Node):
-    def __init__(self, action, varname=None):
-        self.action = Variable(action)
-        self.varname = varname
-
-    def render(self, context):
-        action_instance = self.args[0].resolve(context)
-        templates = [
-            'activity/%s/action.html' % action_instance.verb.replace(' ', '_'),
-            'activity/action.html',
-        ]
-        return render_to_string(templates, {'action': action_instance,
-            'hide_actor': True}, context)
-
-
-class DisplayGroupedActions(AsNode):
-
-    def render(self, context):
-        actions_instance = self.args[0].resolve(context)
-        templates = [
-            'activity/%s/action.html' %
-                actions_instance.verb.replace(' ', '_'),
-            'activity/action.html',
-        ]
-        return render_to_string(templates, {'actions': actions_instance},
-            context)
-
-
-class UserContentTypeNode(Node):
-
-    def __init__(self, *args):
-        self.args = args
-
-    def render(self, context):
-        context[self.args[-1]] = ContentType.objects.get_for_model(User)
-        return ''
-
-
-def display_action(parser, token):
-    return DisplayAction.handle_token(parser, token)
-
-
-def display_action_short(parser, token):
-    return DisplayActionShort.handle_token(parser, token)
-
-
-def display_grouped_actions(parser, token):
-    return DisplayGroupedActions.handle_token(parser, token)
-
-
+@register.tag
 def action_label(parser, token):
     return DisplayActionLabel.handle_token(parser, token)
 
 
-# TODO: remove this, it's heinous
-def get_user_contenttype(parser, token):
-    return UserContentTypeNode(*token.split_contents())
+class DisplayAction(AsNode):
 
-def is_following(user, actor):
-    return Follow.objects.is_following(user, actor)
+    def render_result(self, context):
+        action = self.args[0].resolve(context)
+        templates = activity_templates(action.verb)
+        return render_to_string(templates, {'action': action}, context)
 
-register.filter(is_following)
-register.tag(display_action)
-register.tag(display_action_short)
-register.tag(display_grouped_actions)
-register.tag(action_label)
-register.tag(get_user_contenttype)
-register.tag('activity_follow_url', do_activity_follow_url)
-register.tag('activity_follow_label', do_activity_follow_label)
+
+@register.tag
+def display_action(parser, token):
+    """
+    Renders an action.
+
+    Usage::
+
+        {% display_action <action> %}
+
+    Alternatively, the action can be rendered to a context variable rather than
+    being rendered inline by using the format::
+
+        {% display_action <action> as <variable_name> %}
+    """
+    return DisplayAction.handle_token(parser, token)
+
+
+class DisplayActionShort(AsNode):
+
+    def render_result(self, context):
+        action = self.args[0].resolve(context)
+        templates = activity_templates(action.verb)
+        return render_to_string(templates,
+            {'action': action, 'hide_actor': True}, context)
+
+
+@register.tag
+def display_action_short(parser, token):
+    """
+    Renders an action, hiding the actor from the action output.
+
+    Usage::
+
+        {% display_action_short <action> %}
+
+    Alternatively, the action can be rendered to a context variable rather than
+    being rendered inline by using the format::
+
+        {% display_action_short <action> as <variable_name> %}
+    """
+    return DisplayActionShort.handle_token(parser, token)
+
+
+class DisplayGroupedActions(AsNode):
+    args_count = 2
+
+    def render_result(self, context):
+        groups = group_verbs(actions=self.args[0].resolve(context),
+            aggressiveness=self.args[1].resolve(context))
+        output = []
+        for verb, actions in groups:
+            templates = activity_templates(verb, template_name='actions.html')
+            output += render_to_string(templates,
+                {'verb': verb, 'actions': actions}, context)
+        return ''.join(output)
+
+
+@register.tag
+def display_grouped_actions(parser, token):
+    """
+    Display actions, grouped by verbs.
+
+    Usage: ``{% display_grouped_actions <actions> <aggressiveness> %}``
+
+    ``actions`` should be an iterable of activity stream actions.
+
+    ``aggressiveness`` should be an integer as to how aggressively to group
+    actions. It correlates to the number of "gaps" allowed between different
+    action types grouping.
+
+    For example, here are several different aggressiveness ratings and how it
+    would order the given list::
+
+        [<post 1>, <update 1>, <update 2>, <remove 1>, <update 3>, <remove 2>, <share 1>, <update 4>, <share 2>]
+
+        {% display_grouped_actions actions 0 %}
+
+        [<post 1>]
+        [<update 1>, <update 2>]
+        [<remove 1>]
+        [<update 3>]
+        [<remove 2>]
+        [<share 1>]
+        [<update 4>]
+        [<share 2>]
+
+        {% display_grouped_actions actions 1 %}
+
+        [<post 1>]
+        [<update 1>, <update 2>, <update 3>]
+        [<remove 1>, <remove 2>]
+        [<share 1>, <share 2>]
+        [<update 4>]
+
+        {% display_grouped_actions actions 2 %}
+
+        [<post 1>]
+        [<update 1>, <update 2>, <update 3>, <update 4>]
+        [<remove 1>, <remove 2>]
+        [<share 1>, <share 2>]
+
+    Each group of actions is rendered using ``activity/<verb>/actions.html``,
+    falling back to ``activity/actions.html`` if no verb-specific template is
+    provided.
+
+    If required, the actions can be rendered to a context variable rather than
+    being rendered inline by using the format::
+
+        {% display_grouped_actions <actions> <aggressiveness> as <variable_name> %}
+    """
+    return DisplayGroupedActions.handle_token(parser, token)

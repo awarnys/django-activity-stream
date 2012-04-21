@@ -23,7 +23,7 @@ class Follow(models.Model):
     """
     Lets a user follow the activities of any specific actor
     """
-    user = models.ForeignKey(User)
+    user = models.ForeignKey(User, related_name='following_activities')
 
     content_type = models.ForeignKey(ContentType)
     object_id = models.CharField(max_length=255)
