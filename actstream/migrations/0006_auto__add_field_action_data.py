@@ -7,13 +7,13 @@ from django.db import models
 class Migration(SchemaMigration):
 
     def forwards(self, orm):
-        
+
         # Adding field 'Action.data'
-        db.add_column('actstream_action', 'data', self.gf('jsonfield.fields.JSONField')(default='', blank=True), keep_default=False)
+        db.add_column('actstream_action', 'data', self.gf('jsonfield.fields.JSONField')(default='', blank=True, null=True), keep_default=False)
 
 
     def backwards(self, orm):
-        
+
         # Deleting field 'Action.data'
         db.delete_column('actstream_action', 'data')
 

@@ -75,7 +75,7 @@ class Action(models.Model):
 
     verb = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    data = JSONField(blank=True)
+    data = JSONField(blank=True, null=True)
 
     target_content_type = models.ForeignKey(ContentType, related_name='target',
         blank=True, null=True)
