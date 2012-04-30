@@ -16,6 +16,17 @@ from actstream.exceptions import ModelNotActionable
 from actstream.signals import action
 from actstream import settings as actstream_settings
 
+class LTE(int):
+    def __new__(cls, n):
+        obj = super(LTE, cls).__new__(cls, n)
+        obj.n = n
+        return obj
+
+    def __eq__(self, other):
+        return other <= self.n
+
+    def __repr__(self):
+        return "<= %s" % self.n
 
 class ActivityBaseTestCase(TestCase):
     actstream_models = ()
@@ -181,14 +192,14 @@ class ActivityTestCase(ActivityBaseTestCase):
         self.assert_(not action in self.user1.actor_actions.public())
 
     def test_tag_follow_url(self):
-        src = '{% load activity_tags %}{% activity_follow_url user %}'
+        src = '{% load activity_tags %}{% follow_url user %}'
         output = Template(src).render(Context({'user': self.user1}))
         ct = ContentType.objects.get_for_model(User)
         self.assertEqual(output, '/follow/%s/%s/' % (ct.pk, self.user1.pk))
 
     def test_tag_follow_label(self):
         src = '{% load activity_tags %}'\
-            '{% activity_follow_label other_user yup nope %}'
+            '{% follow_label other_user yup nope %}'
 
         # Anonymous.
         output = Template(src).render(Context({'other_user': self.user1}))
@@ -339,9 +350,9 @@ class GFKManagerTestCase(TestCase):
         n = actions().count()
 
         # compare to fetching only 1 generic relation
-        self.assertNumQueries(n + 1,
+        self.assertNumQueries(LTE(n + 1),
             lambda: [a.target for a in actions()])
-        self.assertNumQueries(num_content_types + 2,
+        self.assertNumQueries(LTE(num_content_types + 2),
             lambda: [a.target for a in
                 actions().fetch_generic_relations('target')])
 
@@ -353,9 +364,9 @@ class GFKManagerTestCase(TestCase):
         # compare to fetching all generic relations
         num_content_types = len(set(sum(actions().values_list(
             'actor_content_type_id', 'target_content_type_id'), ())))
-        self.assertNumQueries(2 * n + 1,
+        self.assertNumQueries(LTE(2 * n + 1),
             lambda: [(a.actor, a.target) for a in actions()])
-        self.assertNumQueries(num_content_types + 2,
+        self.assertNumQueries(LTE(num_content_types + 2),
             lambda: [(a.actor, a.target) for a in
                 actions().fetch_generic_relations()])
 
@@ -367,7 +378,7 @@ class GFKManagerTestCase(TestCase):
             action_actor_targets_fetch_generic_all)
 
         # fetch only 1 generic relation, but access both gfks
-        self.assertNumQueries(n + num_content_types + 2,
+        self.assertNumQueries(LTE(n + num_content_types + 2),
             lambda: [(a.actor, a.target) for a in
                 actions().fetch_generic_relations('target')])
         action_actor_targets_fetch_generic_target = [
