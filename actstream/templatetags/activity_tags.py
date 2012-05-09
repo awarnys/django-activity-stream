@@ -3,7 +3,7 @@ from django.template.loader import render_to_string
 from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
 
-from actstream.models import Follow
+from actstream.models import Follow, Action
 
 register = Library()
 
@@ -130,6 +130,13 @@ def is_following(user, actor):
     return Follow.objects.is_following(user, actor)
 
 
+def activity(obj):
+    """
+    Returns a QuerySet of all ``Action``s for a the object.
+    """
+    return Action.objects.for_object(obj)
+
+
 def follow_url(parser, token):
     """
     Renders the URL of the follow view for a particular actor instance
@@ -239,6 +246,7 @@ def display_grouped_actions(parser, token):
 
 
 register.filter(is_following)
+register.filter(activity)
 register.tag(display_action)
 register.tag(follow_url)
 register.tag(actor_url)
