@@ -15,6 +15,20 @@ def _activity_templates(verb, template_name='action.html'):
     ]
 
 
+def group_verbs(actions, aggressiveness=0):
+    verbs = []
+    groups = {}
+    for action in actions:
+        if action.verb not in verbs:
+            if len(verbs) > aggressiveness:
+                verb = verbs.pop(0)
+                yield (verb, groups.pop(verb))
+            verbs.append(action.verb)
+        groups.setdefault(action.verb, []).append(action)
+    for verb in verbs:
+        yield (verb, groups[verb])
+
+
 class DisplayActivityFollowUrl(Node):
     def __init__(self, actor):
         self.actor = Variable(actor)
@@ -87,7 +101,7 @@ class DisplayAction(AsNode):
 
     def render_result(self, context):
         action_instance = self.args[0].resolve(context)
-        templates = activity_templates(action.verb)
+        templates = _activity_templates(action_instance.verb)
         return render_to_string(templates, {'action': action_instance},
             context)
 
@@ -163,7 +177,7 @@ class DisplayGroupedActions(AsNode):
             aggressiveness=self.args[1].resolve(context))
         output = []
         for verb, actions in groups:
-            templates = activity_templates(verb, template_name='actions.html')
+            templates = _activity_templates(verb, template_name='actions.html')
             output += render_to_string(templates,
                 {'verb': verb, 'actions': actions}, context)
         return ''.join(output)
