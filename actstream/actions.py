@@ -12,7 +12,7 @@ except ImportError:
     now = datetime.datetime.now
 
 
-def follow(user, obj, send_action=True, actor_only=True):
+def follow(user, obj, send_action=True, actor_only=True, verb=None):
     """
     Creates a relationship allowing the object's activities to appear in the
     user's stream.
@@ -39,11 +39,13 @@ def follow(user, obj, send_action=True, actor_only=True):
         content_type=ContentType.objects.get_for_model(obj),
         actor_only=actor_only)
     if send_action and created:
-        action.send(user, verb=_('started following'), target=obj)
+        if not verb:
+            verb = _('started following')
+        action.send(user, verb=verb, target=obj)
     return follow
 
 
-def unfollow(user, obj, send_action=False):
+def unfollow(user, obj, send_action=False, verb=None):
     """
     Removes a "follow" relationship.
 
@@ -60,7 +62,9 @@ def unfollow(user, obj, send_action=False):
     Follow.objects.filter(user=user, object_id=obj.pk,
         content_type=ContentType.objects.get_for_model(obj)).delete()
     if send_action:
-        action.send(user, verb=_('stopped following'), target=obj)
+        if not verb:
+            verb = _('stopped following')
+        action.send(user, verb=verb, target=obj)
 
 
 def is_following(user, obj):
