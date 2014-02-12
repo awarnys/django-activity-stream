@@ -6,7 +6,6 @@ from django.utils.translation import ugettext as _
 
 from django.contrib.contenttypes import generic
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.auth.models import User
 
 from actstream import managers, settings as actstream_settings
 from actstream.signals import action
@@ -18,6 +17,10 @@ try:
     now = timezone.now
 except ImportError:
     now = datetime.datetime.now
+
+from actstream.compat import user_model_label
+
+User = user_model_label
 
 
 class Follow(models.Model):
