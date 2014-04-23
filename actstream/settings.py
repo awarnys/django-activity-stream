@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db.models import get_model
 
 MODELS = {}
-for model in getattr(settings, 'ACTSTREAM_ACTION_MODELS', ('auth.User',)):
+for model in getattr(settings, 'ACTSTREAM_ACTION_MODELS', ('auth.User',settings.AUTH_USER_MODEL, )):
     MODELS[model.lower()] = model = get_model(*model.split('.'))
 
 MANAGER_MODULE = getattr(settings, 'ACTSTREAM_MANAGER',
